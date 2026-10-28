@@ -60,6 +60,20 @@ object Glyph {
         Shell.cmd(sb.toString()).submit { done() }
     }
 
+    /** Light `count` segments for `holdMs`, then turn off - used to show a count like notifications. */
+    fun showCount(count: Int, holdMs: Int = 2500, percent: Int = 100, done: () -> Unit = {}) {
+        val n = count.coerceIn(0, vlineIndexOrder.size)
+        val sb = StringBuilder()
+        vlineIndexOrder.forEachIndexed { i, idx ->
+            val v = if (i < n) raw(percent) else 0
+            sb.append("echo \"$idx $v\" > $DIR/single_led_br; ")
+        }
+        val secs = "%d.%03d".format(holdMs / 1000, holdMs % 1000)
+        sb.append("sleep $secs; ")
+        vlineIndexOrder.forEach { idx -> sb.append("echo \"$idx 0\" > $DIR/single_led_br; ") }
+        Shell.cmd(sb.toString()).submit { done() }
+    }
+
     /** Show battery percentage on the bottom line for `holdMs`, then turn off. */
     fun showBattery(percent: Int, holdMs: Int = 2500, done: () -> Unit = {}) {
         val lit = ((percent.coerceIn(0, 100) / 100f) * vlineIndexOrder.size).let {
