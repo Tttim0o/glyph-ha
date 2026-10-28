@@ -19,7 +19,6 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.Looper
 import android.widget.Toast
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -31,8 +30,8 @@ import kotlin.math.sqrt
  *    bottom line.
  *  - Face-down + screen off + unread notifications: the small "front" glyph fades in and back
  *    out once (~5s), re-triggering only when the unread count changes - not a steady light.
- *  - Face-down + screen off + music playing: the bottom line pulses gently (an ambient glow,
- *    not a true audio-reactive visualizer - see Settings for why).
+ *  - Face-down + screen off + music playing: the bottom line becomes an audio-reactive
+ *    equalizer / progress bar (see MusicVisualizer).
  *  - Face-down + screen off + Volume Down pressed twice quickly: blinks out the unread
  *    notification count. Volume Down alone is used (not + Power) because that combo is the
  *    system-wide screenshot shortcut.
@@ -76,8 +75,8 @@ class GestureService : Service(), SensorEventListener {
     @Volatile private var isFaceDown = false
     @Volatile private var screenOn = true
     private var lastGlowedUnreadCount = -1
-    private var pulsing = false
-    private var pulsePhase = 0.0
+    private val visualizer = MusicVisualizer()
+    private var visualizing = false
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -204,15 +203,14 @@ class GestureService : Service(), SensorEventListener {
         }
 
         val musicOn = active && (getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive
-        if (musicOn) {
-            pulsing = true
-            pulsePhase += 0.35
-            val brightness = (45 + 40 * sin(pulsePhase)).toInt().coerceIn(5, 90)
-            Glyph.set("vline", brightness)
-        } else if (pulsing) {
-            pulsing = false
-            Glyph.set("vline", 0)
+        if (musicOn && !visualizing) {
+            visualizing = true
+            visualizer.start()
+        } else if (!musicOn && visualizing) {
+            visualizing = false
+            visualizer.stop()
         }
+    }
     }
 
     private fun showActiveCount() {
