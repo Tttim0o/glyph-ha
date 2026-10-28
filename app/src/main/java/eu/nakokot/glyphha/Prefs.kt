@@ -14,4 +14,11 @@ object Prefs {
             t
         }
     }
+
+    fun gesturesEnabled(c: Context): Boolean =
+        c.getSharedPreferences("glyph", Context.MODE_PRIVATE).getBoolean("gestures", false)
+
+    fun setGesturesEnabled(c: Context, v: Boolean) {
+        c.getSharedPreferences("glyph", Context.MODE_PRIVATE).edit().putBoolean("gestures", v).apply()
+    }
 }
