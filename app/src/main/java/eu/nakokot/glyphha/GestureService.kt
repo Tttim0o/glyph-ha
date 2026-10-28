@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -11,35 +12,48 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.AudioManager
 import android.os.BatteryManager
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.widget.Toast
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Foreground service: watches the accelerometer for two gestures.
- *  - Shake (two sharp jerks in ~1s): toggles the white glyphs as a torch, like Moto's chop-chop.
- *  - Taps on the frame/back (sharp short spikes, no travel): while charging, 2 taps show the
- *    battery percentage on the bottom line; anytime, 3 taps show the notification count and
- *    4 taps show how many arrived in the last 5 minutes.
+ * Foreground service: watches the accelerometer for a few gestures, plus two face-down
+ * ambient effects and a raw-hardware-button shortcut.
  *
- * Gesture detection from a bare accelerometer is inherently approximate (no dedicated tap IC
- * like Pixel has) - thresholds are tuned loosely and may need adjusting per taste.
+ *  - Shake (two sharp jerks in ~1s): toggles the white glyphs as a torch.
+ *  - Tap on the frame/back while charging (two sharp isolated spikes): shows battery % on the
+ *    bottom line.
+ *  - Face-down + screen off + unread notifications: the small "front" glyph glows steadily
+ *    (an ambient "you have notifications" light).
+ *  - Face-down + screen off + music playing: the bottom line pulses gently (an ambient glow,
+ *    not a true audio-reactive visualizer - see Settings for why).
+ *  - Face-down + screen off + Volume Down pressed twice quickly: blinks out the unread
+ *    notification count. Volume Down alone is used (not + Power) because that combo is the
+ *    system-wide screenshot shortcut.
+ *
+ * Gesture detection from a bare accelerometer is inherently approximate - thresholds are
+ * tuned loosely and may need adjusting; enable the debug toasts in Settings to see live values.
  */
 class GestureService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var buttonWatcher: ButtonWatcher? = null
 
     // Rolling history of recent |magnitude| samples, used to require a calm baseline
-    // before a spike counts as a deliberate tap (ambient charger/cable vibration stays
-    // low-amplitude and continuous, so it never produces a clean calm->spike->calm shape).
+    // before a spike counts as a deliberate tap.
     private val history = ArrayDeque<Pair<Long, Float>>()
-    private val historyWindowMs = 400L     // retention, used for the shake-swing check
-    private val calmWindowMs = 150L        // only this much immediate past must be calm for a tap
+    private val historyWindowMs = 400L
+    private val calmWindowMs = 150L
 
-    private val calmThreshold = 2.5f       // max |mag| to call the recent past "calm"
-    private val tapThreshold = 24f         // single sharp spike -> tap candidate
-    private val shakeThreshold = 20f       // sustained large swing -> shake candidate
+    private val calmThreshold = 2.5f
+    private val tapThreshold = 32f          // raised: charger/table vibration shouldn't reach this
+    private val shakeThreshold = 20f
 
     private var lastPeakAt = 0L
     private val shakeWindowMs = 1200L
@@ -51,21 +65,52 @@ class GestureService : Service(), SensorEventListener {
     private var lastActionAt = 0L
     private val actionCooldownMs = 1800L
 
+    @Volatile private var isFaceDown = false
+    @Volatile private var screenOn = true
+    private var frontLedOn = false
+    private var pulsing = false
+    private var pulsePhase = 0.0
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            screenOn = intent.action == Intent.ACTION_SCREEN_ON
+            updateAmbient()
+        }
+    }
+
+    private val ambientTick = object : Runnable {
+        override fun run() {
+            updateAmbient()
+            mainHandler.postDelayed(this, 200)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         startForeground(1, buildNotification())
         sensorManager.registerListener(
-            this,
-            sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
-            SensorManager.SENSOR_DELAY_GAME
+            this, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_GAME
         )
+        registerReceiver(screenReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF)
+        })
+        mainHandler.post(ambientTick)
+        buttonWatcher = ButtonWatcher {
+            if (isFaceDown && !screenOn) {
+                toast("VolDown x2 -> notif count")
+                showActiveCount()
+            }
+        }.also { it.start() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
         sensorManager.unregisterListener(this)
+        try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
+        mainHandler.removeCallbacks(ambientTick)
+        buttonWatcher?.stop()
         super.onDestroy()
     }
 
@@ -75,18 +120,19 @@ class GestureService : Service(), SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent) {
         val (x, y, z) = event.values
+        isFaceDown = z < -7f && kotlin.math.abs(x) < 4f && kotlin.math.abs(y) < 4f
         val magnitude = kotlin.math.abs(sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH)
         val now = System.currentTimeMillis()
 
         history.addLast(now to magnitude)
         while (history.isNotEmpty() && now - history.first().first > historyWindowMs) history.removeFirst()
 
-        if (now - lastActionAt < actionCooldownMs) return // quiet period right after any gesture fired
+        if (now - lastActionAt < actionCooldownMs) return
 
         val calmBefore = history.dropLast(1).filter { now - it.first <= calmWindowMs }.all { it.second < calmThreshold }
         val sustainedSwing = history.count { it.second > shakeThreshold } >= 3
 
-        if (now - lastPeakAt < 120) return // ignore samples within the same physical event
+        if (now - lastPeakAt < 120) return
 
         if (sustainedSwing) {
             lastPeakAt = now
@@ -103,22 +149,43 @@ class GestureService : Service(), SensorEventListener {
             if (now - firstTapAt > tapWindowMs) { tapPeaks = 0; firstTapAt = now }
             tapPeaks++
             toast("tap $tapPeaks (mag=${"%.1f".format(magnitude)}, charging=${isCharging()})")
-            maybeFireTap(tapPeaks, now)
+            if (isCharging() && tapPeaks == 2) {
+                tapPeaks = 0; lastActionAt = now
+                toast("2x tap -> battery"); showBattery()
+            }
         }
     }
 
-    private fun maybeFireTap(count: Int, now: Long) {
-        val charging = isCharging()
-        when {
-            charging && count == 2 -> { tapPeaks = 0; lastActionAt = now; toast("2x tap -> battery"); showBattery() }
-            count == 3 -> { tapPeaks = 0; lastActionAt = now; toast("3x tap -> notif count"); showNotifCount() }
-            count == 4 -> { tapPeaks = 0; lastActionAt = now; toast("4x tap -> last 5 min"); showRecentNotifCount() }
+    /** Runs every 200ms: applies the two face-down ambient effects. Cheap no-ops when inactive. */
+    private fun updateAmbient() {
+        val active = isFaceDown && !screenOn
+
+        val shouldGlow = active && NotificationCounterService.Stats.countActive(this) > 0
+        if (shouldGlow != frontLedOn) {
+            frontLedOn = shouldGlow
+            Glyph.set("front", if (shouldGlow) 14 else 0)
         }
+
+        val musicOn = active && (getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive
+        if (musicOn) {
+            pulsing = true
+            pulsePhase += 0.35
+            val brightness = (45 + 40 * sin(pulsePhase)).toInt().coerceIn(5, 90)
+            Glyph.set("vline", brightness)
+        } else if (pulsing) {
+            pulsing = false
+            Glyph.set("vline", 0)
+        }
+    }
+
+    private fun showActiveCount() {
+        val n = NotificationCounterService.Stats.countActive(this)
+        Glyph.showCount(n.coerceAtMost(8))
     }
 
     private fun toast(msg: String) {
         if (!Prefs.debugToasts(this)) return
-        Toast.makeText(this, "Glyph: $msg", Toast.LENGTH_SHORT).show()
+        mainHandler.post { Toast.makeText(this, "Glyph: $msg", Toast.LENGTH_SHORT).show() }
     }
 
     private fun isCharging(): Boolean {
@@ -133,16 +200,6 @@ class GestureService : Service(), SensorEventListener {
     }
 
     private fun showBattery() = Glyph.showBattery(batteryPercent())
-
-    private fun showNotifCount() {
-        val n = NotificationCounterService.Stats.countTotal(this)
-        Glyph.blinkCount("vline", n.coerceAtMost(8))
-    }
-
-    private fun showRecentNotifCount() {
-        val n = NotificationCounterService.Stats.countLast(this, 5)
-        Glyph.blinkCount("round", n.coerceAtMost(8))
-    }
 
     private fun buildNotification(): Notification {
         val channelId = "glyph_gestures"

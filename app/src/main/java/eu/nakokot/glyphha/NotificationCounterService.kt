@@ -5,25 +5,42 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
 /**
- * Tracks notification post times so gestures can report "how many notifications"
- * and "how many in the last 5 minutes". Requires the user to grant notification
- * access once (Settings > Apps > Special access > Notification access).
+ * Tracks notifications so gestures can show "how many unread" (currently active, undismissed)
+ * and "how many arrived in the last N minutes" (a rolling post-time log). Requires the user to
+ * grant notification access once (Settings > Apps > Special access > Notification access).
  */
 class NotificationCounterService : NotificationListenerService() {
-
-    override fun onNotificationPosted(sbn: StatusBarNotification) {
-        Stats.record(applicationContext, sbn.postTime)
-    }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         Stats.setConnected(applicationContext, true)
+        instance = this
+        Stats.refreshActiveCount(this)
+    }
+
+    override fun onListenerDisconnected() {
+        instance = null
+        super.onListenerDisconnected()
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        Stats.record(applicationContext, sbn.postTime)
+        Stats.refreshActiveCount(this)
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        Stats.refreshActiveCount(this)
+    }
+
+    companion object {
+        @Volatile var instance: NotificationCounterService? = null
     }
 
     object Stats {
         private const val PREF = "notif_stats"
         private const val KEY = "timestamps"
         private const val KEY_CONNECTED = "connected"
+        private const val KEY_ACTIVE = "active_unread"
 
         fun setConnected(c: Context, v: Boolean) {
             c.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean(KEY_CONNECTED, v).apply()
@@ -52,8 +69,20 @@ class NotificationCounterService : NotificationListenerService() {
                 .count { it > cutoff }
         }
 
-        /** Total tracked in the last 24h, used as the "how many notifications" figure. */
-        fun countTotal(c: Context): Int =
-            (c.getSharedPreferences(PREF, Context.MODE_PRIVATE).getStringSet(KEY, emptySet()) ?: emptySet()).size
+        /** Recomputes the count of currently active (undismissed), non-ongoing notifications. */
+        fun refreshActiveCount(service: NotificationListenerService) {
+            val count = try {
+                service.activeNotifications
+                    .filter { it.packageName != service.packageName }
+                    .filter { (it.notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) == 0 }
+                    .filter { (it.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) == 0 }
+                    .size
+            } catch (e: Exception) { 0 }
+            service.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putInt(KEY_ACTIVE, count).apply()
+        }
+
+        /** The "unread" figure: currently active, user-clearable notifications. */
+        fun countActive(c: Context): Int =
+            c.getSharedPreferences(PREF, Context.MODE_PRIVATE).getInt(KEY_ACTIVE, 0)
     }
 }

@@ -88,7 +88,29 @@ fun SettingsScreen() {
             "Gesture detection runs as a low-priority foreground service and reads the " +
                 "accelerometer continuously, which costs roughly 1-3% battery per day. Shake and " +
                 "tap thresholds are approximate — there's no dedicated tap sensor on this phone, " +
-                "so accuracy will be lower than a Pixel's \"Quick Tap\".",
+                "so accuracy will be lower than a Pixel's \"Quick Tap\". The unread-notification " +
+                "count comes from currently active, undismissed notifications (via notification " +
+                "access), not a historical log.",
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        Text("About the music pulse", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "This is an ambient glow synced to a fixed rhythm while music plays face-down, not a " +
+                "real audio-reactive visualizer. A true one would need to capture system audio " +
+                "(AudioPlaybackCaptureConfiguration), which pops a one-time \"allow recording\" " +
+                "system dialog and doesn't work with apps that block capture (Spotify, DRM audio).",
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        Text("About the Volume Down shortcut", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Pressing Volume Down twice while face-down with the screen off blinks out the unread " +
+                "count. It's read at the raw input level (root), independently of the volume keys' " +
+                "normal function. Volume Down + Power isn't used, since that combo is reserved " +
+                "system-wide for the screenshot shortcut.",
             style = MaterialTheme.typography.bodySmall
         )
     }

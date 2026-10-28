@@ -56,10 +56,12 @@ fun HomeScreen() {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) {
-                        Text("Shake-to-torch & tap gestures")
+                        Text("Shake, tap & face-down gestures")
                         Text(
-                            "Shake twice quickly: toggle torch. Double-tap the back while charging: show battery. " +
-                                "Triple-tap: notification count. Quadruple-tap: new in last 5 min.",
+                            "Shake twice quickly: toggle torch. Tap the back twice while charging: show " +
+                                "battery. Face down with the screen off: the front glyph glows if you have " +
+                                "unread notifications, the bottom line pulses gently while music plays, and " +
+                                "pressing Volume Down twice blinks out the unread count.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -78,7 +80,7 @@ fun HomeScreen() {
                         onClick = {
                             context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
                         },
-                        label = { Text("Grant notification access for the 3×/4× tap counts") },
+                        label = { Text("Grant notification access for the unread-count effects") },
                         leadingIcon = { Icon(Icons.Filled.NotificationsActive, null) }
                     )
                 }
@@ -92,11 +94,8 @@ fun HomeScreen() {
                 Glyph.showBattery(bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY))
             }) { Text("Battery") }
             OutlinedButton(onClick = {
-                Glyph.blinkCount("vline", NotificationCounterService.Stats.countTotal(context).coerceAtMost(8))
-            }) { Text("Notif count") }
-            OutlinedButton(onClick = {
-                Glyph.blinkCount("round", NotificationCounterService.Stats.countLast(context, 5).coerceAtMost(8))
-            }) { Text("Last 5 min") }
+                Glyph.showCount(NotificationCounterService.Stats.countActive(context).coerceAtMost(8))
+            }) { Text("Unread count") }
         }
     }
 }
