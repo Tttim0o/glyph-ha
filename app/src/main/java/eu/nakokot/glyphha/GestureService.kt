@@ -13,6 +13,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.BatteryManager
 import android.os.IBinder
+import android.widget.Toast
 import kotlin.math.sqrt
 
 /**
@@ -28,15 +29,27 @@ import kotlin.math.sqrt
 class GestureService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
-    private var lastMagnitude = 0f
+
+    // Rolling history of recent |magnitude| samples, used to require a calm baseline
+    // before a spike counts as a deliberate tap (ambient charger/cable vibration stays
+    // low-amplitude and continuous, so it never produces a clean calm->spike->calm shape).
+    private val history = ArrayDeque<Pair<Long, Float>>()
+    private val historyWindowMs = 400L     // retention, used for the shake-swing check
+    private val calmWindowMs = 150L        // only this much immediate past must be calm for a tap
+
+    private val calmThreshold = 2.5f       // max |mag| to call the recent past "calm"
+    private val tapThreshold = 24f         // single sharp spike -> tap candidate
+    private val shakeThreshold = 20f       // sustained large swing -> shake candidate
+
     private var lastPeakAt = 0L
     private val shakeWindowMs = 1200L
-    private val tapWindowMs = 700L
+    private val tapWindowMs = 650L
     private var shakePeaks = 0
     private var firstShakeAt = 0L
     private var tapPeaks = 0
     private var firstTapAt = 0L
     private var lastActionAt = 0L
+    private val actionCooldownMs = 1800L
 
     override fun onCreate() {
         super.onCreate()
@@ -62,39 +75,50 @@ class GestureService : Service(), SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent) {
         val (x, y, z) = event.values
-        val magnitude = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
+        val magnitude = kotlin.math.abs(sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH)
         val now = System.currentTimeMillis()
-        if (now - lastActionAt < 900) { lastMagnitude = magnitude; return } // debounce after firing
 
-        val isSharp = kotlin.math.abs(magnitude - lastMagnitude) > 14f
-        val isJerk = kotlin.math.abs(magnitude) > 16f
+        history.addLast(now to magnitude)
+        while (history.isNotEmpty() && now - history.first().first > historyWindowMs) history.removeFirst()
 
-        if (isJerk && now - lastPeakAt > 150) {
+        if (now - lastActionAt < actionCooldownMs) return // quiet period right after any gesture fired
+
+        val calmBefore = history.dropLast(1).filter { now - it.first <= calmWindowMs }.all { it.second < calmThreshold }
+        val sustainedSwing = history.count { it.second > shakeThreshold } >= 3
+
+        if (now - lastPeakAt < 120) return // ignore samples within the same physical event
+
+        if (sustainedSwing) {
             lastPeakAt = now
-            // Shake: sustained large jerks -> count toward shake gesture.
             if (now - firstShakeAt > shakeWindowMs) { shakePeaks = 0; firstShakeAt = now }
             shakePeaks++
+            toast("shake peak $shakePeaks/2 (mag=${"%.1f".format(magnitude)})")
             if (shakePeaks >= 2) {
                 shakePeaks = 0; lastActionAt = now
+                toast("shake -> torch toggle")
                 Glyph.toggleTorch()
             }
-        } else if (isSharp && !isJerk && now - lastPeakAt > 120) {
+        } else if (calmBefore && magnitude > tapThreshold) {
             lastPeakAt = now
-            // Tap: short sharp spike without a sustained jerk -> count toward tap gesture.
             if (now - firstTapAt > tapWindowMs) { tapPeaks = 0; firstTapAt = now }
             tapPeaks++
+            toast("tap $tapPeaks (mag=${"%.1f".format(magnitude)}, charging=${isCharging()})")
             maybeFireTap(tapPeaks, now)
         }
-        lastMagnitude = magnitude
     }
 
     private fun maybeFireTap(count: Int, now: Long) {
         val charging = isCharging()
         when {
-            charging && count == 2 -> { tapPeaks = 0; lastActionAt = now; showBattery() }
-            count == 3 -> { tapPeaks = 0; lastActionAt = now; showNotifCount() }
-            count == 4 -> { tapPeaks = 0; lastActionAt = now; showRecentNotifCount() }
+            charging && count == 2 -> { tapPeaks = 0; lastActionAt = now; toast("2x tap -> battery"); showBattery() }
+            count == 3 -> { tapPeaks = 0; lastActionAt = now; toast("3x tap -> notif count"); showNotifCount() }
+            count == 4 -> { tapPeaks = 0; lastActionAt = now; toast("4x tap -> last 5 min"); showRecentNotifCount() }
         }
+    }
+
+    private fun toast(msg: String) {
+        if (!Prefs.debugToasts(this)) return
+        Toast.makeText(this, "Glyph: $msg", Toast.LENGTH_SHORT).show()
     }
 
     private fun isCharging(): Boolean {
