@@ -1,0 +1,5 @@
+<resources>
+    <string name="s_pulse">Pulse</string>
+    <string name="s_all">All on</string>
+    <string name="s_off">Off</string>
+</resources>

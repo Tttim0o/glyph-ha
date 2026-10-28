@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="Glyph HA"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity>
+
+        <activity android:name=".ShortcutActivity" android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true" />
+
+        <receiver android:name=".GlyphReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="eu.nakokot.glyphha.SET" />
+                <action android:name="eu.nakokot.glyphha.PULSE" />
+                <action android:name="eu.nakokot.glyphha.OFF" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
