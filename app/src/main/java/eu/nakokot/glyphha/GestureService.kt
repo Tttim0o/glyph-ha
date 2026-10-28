@@ -211,7 +211,6 @@ class GestureService : Service(), SensorEventListener {
             visualizer.stop()
         }
     }
-    }
 
     private fun showActiveCount() {
         val n = NotificationCounterService.Stats.countActive(this)
