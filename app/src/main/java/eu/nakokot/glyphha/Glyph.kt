@@ -90,6 +90,29 @@ object Glyph {
         Shell.cmd(sb.toString()).submit { done() }
     }
 
+    /** Fade a group in, hold, then fade it out over roughly `totalMs` - a one-shot ambient pulse. */
+    fun ambientGlow(group: String, totalMs: Int = 5000, peakPercent: Int = 18, done: () -> Unit = {}) {
+        val node = groups[group] ?: return done()
+        val stepMs = 80
+        val rampMs = (totalMs * 0.35).toInt()
+        val holdMs = totalMs - rampMs * 2
+        val steps = (rampMs / stepMs).coerceAtLeast(1)
+        val sb = StringBuilder()
+        val stepSecs = "%d.%03d".format(stepMs / 1000, stepMs % 1000)
+        for (i in 1..steps) {
+            val v = raw(peakPercent * i / steps)
+            sb.append("echo $v > $DIR/$node; sleep $stepSecs; ")
+        }
+        val holdSecs = "%d.%03d".format(holdMs.coerceAtLeast(0) / 1000, holdMs.coerceAtLeast(0) % 1000)
+        sb.append("sleep $holdSecs; ")
+        for (i in (steps - 1) downTo 0) {
+            val v = raw(peakPercent * i / steps)
+            sb.append("echo $v > $DIR/$node; sleep $stepSecs; ")
+        }
+        sb.append("echo 0 > $DIR/$node; ")
+        Shell.cmd(sb.toString()).submit { done() }
+    }
+
     /** Blink a group `times`, used to signal a count (e.g. notifications). */
     fun blinkCount(group: String, times: Int, done: () -> Unit = {}) {
         val node = groups[group] ?: return done()
