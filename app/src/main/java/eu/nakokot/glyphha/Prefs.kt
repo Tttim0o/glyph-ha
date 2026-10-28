@@ -21,4 +21,12 @@ object Prefs {
     fun setGesturesEnabled(c: Context, v: Boolean) {
         c.getSharedPreferences("glyph", Context.MODE_PRIVATE).edit().putBoolean("gestures", v).apply()
     }
+
+    /** While tuning: show a toast for every detected peak/action so it can be judged live. */
+    fun debugToasts(c: Context): Boolean =
+        c.getSharedPreferences("glyph", Context.MODE_PRIVATE).getBoolean("debug_toasts", true)
+
+    fun setDebugToasts(c: Context, v: Boolean) {
+        c.getSharedPreferences("glyph", Context.MODE_PRIVATE).edit().putBoolean("debug_toasts", v).apply()
+    }
 }

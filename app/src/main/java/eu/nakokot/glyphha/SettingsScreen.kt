@@ -6,6 +6,11 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -62,6 +67,20 @@ fun SettingsScreen() {
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
         Text("Token", style = MaterialTheme.typography.titleSmall)
         SelectionContainer { Text(token, style = MaterialTheme.typography.bodyMedium) }
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        var debugToasts by remember { mutableStateOf(Prefs.debugToasts(context)) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text("Debug toasts for gestures", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Shows a toast for every detected tap/shake while tuning. Turn off once it feels right.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Switch(checked = debugToasts, onCheckedChange = { debugToasts = it; Prefs.setDebugToasts(context, it) })
+        }
 
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
         Text("About the gestures", style = MaterialTheme.typography.titleSmall)
