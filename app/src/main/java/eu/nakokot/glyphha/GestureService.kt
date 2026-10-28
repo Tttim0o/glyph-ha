@@ -28,8 +28,8 @@ import kotlin.math.sqrt
  *  - Shake (two sharp jerks in ~1s): toggles the white glyphs as a torch.
  *  - Tap on the frame/back while charging (two sharp isolated spikes): shows battery % on the
  *    bottom line.
- *  - Face-down + screen off + unread notifications: the small "front" glyph glows steadily
- *    (an ambient "you have notifications" light).
+ *  - Face-down + screen off + unread notifications: the small "front" glyph fades in and back
+ *    out once (~5s), re-triggering only when the unread count changes - not a steady light.
  *  - Face-down + screen off + music playing: the bottom line pulses gently (an ambient glow,
  *    not a true audio-reactive visualizer - see Settings for why).
  *  - Face-down + screen off + Volume Down pressed twice quickly: blinks out the unread
@@ -52,7 +52,9 @@ class GestureService : Service(), SensorEventListener {
     private val calmWindowMs = 150L
 
     private val calmThreshold = 2.5f
-    private val tapThreshold = 32f          // raised: charger/table vibration shouldn't reach this
+    private val tapThreshold = 28f
+    private val settleThreshold = 6f        // candidate must decay back below this to count as a real knock
+    private val settleWindowMs = 150L       // ...within this long; sustained vibration never settles in time
     private val shakeThreshold = 20f
 
     private var lastPeakAt = 0L
@@ -65,9 +67,13 @@ class GestureService : Service(), SensorEventListener {
     private var lastActionAt = 0L
     private val actionCooldownMs = 1800L
 
+    // A tap candidate waits here until it either settles (real knock) or times out (noise).
+    private var pendingTapAt = 0L
+    private var pendingTapMagnitude = 0f
+
     @Volatile private var isFaceDown = false
     @Volatile private var screenOn = true
-    private var frontLedOn = false
+    private var lastGlowedUnreadCount = -1
     private var pulsing = false
     private var pulsePhase = 0.0
 
@@ -127,6 +133,19 @@ class GestureService : Service(), SensorEventListener {
         history.addLast(now to magnitude)
         while (history.isNotEmpty() && now - history.first().first > historyWindowMs) history.removeFirst()
 
+        // A pending tap candidate: confirm it only once the signal has settled back down -
+        // genuine knocks ring out fast; charger/motor vibration stays elevated and gets dropped.
+        if (pendingTapAt != 0L) {
+            if (magnitude < settleThreshold) {
+                pendingTapAt = 0L
+                registerTap(now, pendingTapMagnitude)
+            } else if (now - pendingTapAt > settleWindowMs) {
+                toast("tap discarded (sustained vibration, mag=${"%.1f".format(magnitude)})")
+                pendingTapAt = 0L
+            }
+            return
+        }
+
         if (now - lastActionAt < actionCooldownMs) return
 
         val calmBefore = history.dropLast(1).filter { now - it.first <= calmWindowMs }.all { it.second < calmThreshold }
@@ -146,13 +165,18 @@ class GestureService : Service(), SensorEventListener {
             }
         } else if (calmBefore && magnitude > tapThreshold) {
             lastPeakAt = now
-            if (now - firstTapAt > tapWindowMs) { tapPeaks = 0; firstTapAt = now }
-            tapPeaks++
-            toast("tap $tapPeaks (mag=${"%.1f".format(magnitude)}, charging=${isCharging()})")
-            if (isCharging() && tapPeaks == 2) {
-                tapPeaks = 0; lastActionAt = now
-                toast("2x tap -> battery"); showBattery()
-            }
+            pendingTapAt = now
+            pendingTapMagnitude = magnitude
+        }
+    }
+
+    private fun registerTap(now: Long, magnitude: Float) {
+        if (now - firstTapAt > tapWindowMs) { tapPeaks = 0; firstTapAt = now }
+        tapPeaks++
+        toast("tap $tapPeaks confirmed (mag=${"%.1f".format(magnitude)}, charging=${isCharging()})")
+        if (isCharging() && tapPeaks == 2) {
+            tapPeaks = 0; lastActionAt = now
+            toast("2x tap -> battery"); showBattery()
         }
     }
 
@@ -160,10 +184,12 @@ class GestureService : Service(), SensorEventListener {
     private fun updateAmbient() {
         val active = isFaceDown && !screenOn
 
-        val shouldGlow = active && NotificationCounterService.Stats.countActive(this) > 0
-        if (shouldGlow != frontLedOn) {
-            frontLedOn = shouldGlow
-            Glyph.set("front", if (shouldGlow) 14 else 0)
+        val unread = if (active) NotificationCounterService.Stats.countActive(this) else 0
+        if (!active || unread == 0) {
+            lastGlowedUnreadCount = -1
+        } else if (unread != lastGlowedUnreadCount) {
+            lastGlowedUnreadCount = unread
+            Glyph.ambientGlow("front") // one fade in/out cycle (~5s), not a continuous light
         }
 
         val musicOn = active && (getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive

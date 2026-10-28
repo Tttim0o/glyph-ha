@@ -59,9 +59,9 @@ fun HomeScreen() {
                         Text("Shake, tap & face-down gestures")
                         Text(
                             "Shake twice quickly: toggle torch. Tap the back twice while charging: show " +
-                                "battery. Face down with the screen off: the front glyph glows if you have " +
-                                "unread notifications, the bottom line pulses gently while music plays, and " +
-                                "pressing Volume Down twice blinks out the unread count.",
+                                "battery. Face down with the screen off: the front glyph fades in and back " +
+                                "out once when you have unread notifications, the bottom line pulses gently " +
+                                "while music plays, and pressing Volume Down twice blinks out the unread count.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
