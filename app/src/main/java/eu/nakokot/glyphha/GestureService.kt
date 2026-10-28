@@ -16,6 +16,7 @@ import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.Looper
 import android.widget.Toast
 import kotlin.math.sin
@@ -44,6 +45,7 @@ class GestureService : Service(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
     private val mainHandler = Handler(Looper.getMainLooper())
     private var buttonWatcher: ButtonWatcher? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     // Rolling history of recent |magnitude| samples, used to require a calm baseline
     // before a spike counts as a deliberate tap.
@@ -95,6 +97,11 @@ class GestureService : Service(), SensorEventListener {
         super.onCreate()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         startForeground(1, buildNotification())
+        // Accelerometer events stop being delivered when the CPU suspends (screen off, charging),
+        // which is exactly when the charging-tap gesture needs them - hold a partial wake lock.
+        wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "glyphha:gestures")
+            .also { it.setReferenceCounted(false); it.acquire() }
         sensorManager.registerListener(
             this, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_GAME
         )
@@ -117,6 +124,7 @@ class GestureService : Service(), SensorEventListener {
         try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
         mainHandler.removeCallbacks(ambientTick)
         buttonWatcher?.stop()
+        wakeLock?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }
 
@@ -163,7 +171,10 @@ class GestureService : Service(), SensorEventListener {
                 toast("shake -> torch toggle")
                 Glyph.toggleTorch()
             }
-        } else if (calmBefore && magnitude > tapThreshold) {
+        } else if (magnitude > tapThreshold) {
+            toast("peak mag=${"%.1f".format(magnitude)} calm=$calmBefore charging=${isCharging()}")
+        }
+        if (calmBefore && magnitude > tapThreshold) {
             lastPeakAt = now
             pendingTapAt = now
             pendingTapMagnitude = magnitude
