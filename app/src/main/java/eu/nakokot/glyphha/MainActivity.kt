@@ -3,46 +3,39 @@ package eu.nakokot.glyphha
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MovieFilter
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val token = Prefs.token(this)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                Surface(Modifier.fillMaxSize()) {
-                    Column(
-                        Modifier.verticalScroll(rememberScrollState()).statusBarsPadding().padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("Glyph HA", style = MaterialTheme.typography.headlineMedium)
-                        Glyph.groups.keys.forEach { g ->
-                            var v by remember { mutableFloatStateOf(0f) }
-                            Text("$g: ${v.toInt()} %")
-                            Slider(value = v, onValueChange = { v = it }, valueRange = 0f..100f,
-                                onValueChangeFinished = { Glyph.set(g, v.toInt()) })
+            GlyphTheme {
+                var tab by remember { mutableIntStateOf(0) }
+                Scaffold(
+                    topBar = { TopAppBar(title = { Text("Glyph HA") }) },
+                    bottomBar = {
+                        NavigationBar {
+                            NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
+                                icon = { Icon(Icons.Filled.Home, "Home") }, label = { Text("Home") })
+                            NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
+                                icon = { Icon(Icons.Filled.MovieFilter, "Animations") }, label = { Text("Animate") })
+                            NavigationBarItem(selected = tab == 2, onClick = { tab = 2 },
+                                icon = { Icon(Icons.Filled.Settings, "Settings") }, label = { Text("Settings") })
                         }
-                        Button(onClick = { Glyph.off() }) { Text("Off") }
-                        Button(onClick = { Glyph.pulse("white", 100, 500) }) { Text("Pulse") }
-                        Spacer(Modifier.height(12.dp))
-                        Text("Home Assistant", style = MaterialTheme.typography.titleMedium)
-                        SelectionContainer {
-                            Text(
-                                "service: notify.mobile_app_<device>\ndata:\n  message: command_broadcast_intent\n" +
-                                    "  title: eu.nakokot.glyphha.PULSE\n  data:\n    intent_package_name: eu.nakokot.glyphha\n" +
-                                    "    intent_extras: \"token:$token,group:round,value:100,ms:800\"\n\n" +
-                                    "Actions: SET (group,value 0-100), PULSE (group,value,ms), OFF\n" +
-                                    "Groups: ${Glyph.groups.keys.joinToString()}\nToken: $token",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                    }
+                ) { padding ->
+                    Surface(Modifier.padding(padding)) {
+                        when (tab) {
+                            0 -> HomeScreen()
+                            1 -> AnimatorScreen()
+                            else -> SettingsScreen()
                         }
                     }
                 }
