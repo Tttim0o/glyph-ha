@@ -158,7 +158,6 @@ class GestureService : Service(), SensorEventListener {
 
         history.addLast(now to magnitude)
         while (history.isNotEmpty() && now - history.first().first > historyWindowMs) history.removeFirst()
-        if (magnitude > 12f) Log.d("Glyphy", "sample mag=${"%.1f".format(magnitude)}")
 
         // Custom motion: record a template, or match the last window against it.
         recent.addLast(now to signed)
@@ -194,7 +193,8 @@ class GestureService : Service(), SensorEventListener {
 
         if (now - lastPeakAt < 120) return
 
-        if (sustainedSwing) {
+        // While charging, the spikes belong to the tap gesture: ringing from a tap must not toggle the torch.
+        if (sustainedSwing && !isCharging()) {
             lastPeakAt = now
             if (now - firstShakeAt > shakeWindowMs) { shakePeaks = 0; firstShakeAt = now }
             shakePeaks++
