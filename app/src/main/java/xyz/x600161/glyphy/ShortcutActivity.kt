@@ -1,4 +1,4 @@
-package eu.nakokot.glyphha
+package xyz.x600161.glyphy
 
 import android.app.Activity
 import android.os.Bundle
@@ -9,9 +9,9 @@ class ShortcutActivity : Activity() {
         super.onCreate(savedInstanceState)
         val done = { finish() }
         when (intent.action) {
-            "eu.nakokot.glyphha.PULSE" -> Glyph.pulse("white", 100, 500, done)
-            "eu.nakokot.glyphha.SET" -> Glyph.set("white", 100, done)
-            "eu.nakokot.glyphha.OFF" -> Glyph.off(done)
+            "xyz.x600161.glyphy.PULSE" -> Glyph.pulse("white", 100, 500, done)
+            "xyz.x600161.glyphy.SET" -> Glyph.set("white", 100, done)
+            "xyz.x600161.glyphy.OFF" -> Glyph.off(done)
             else -> finish()
         }
     }

@@ -1,4 +1,4 @@
-package eu.nakokot.glyphha
+package xyz.x600161.glyphy
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*

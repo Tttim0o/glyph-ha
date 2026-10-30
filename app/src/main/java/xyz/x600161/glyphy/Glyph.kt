@@ -1,4 +1,4 @@
-package eu.nakokot.glyphha
+package xyz.x600161.glyphy
 
 import com.topjohnwu.superuser.Shell
 

@@ -1,4 +1,4 @@
-package eu.nakokot.glyphha
+package xyz.x600161.glyphy
 
 import android.app.Notification
 import android.app.NotificationChannel

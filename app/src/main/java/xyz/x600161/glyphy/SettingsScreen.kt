@@ -1,4 +1,4 @@
-package eu.nakokot.glyphha
+package xyz.x600161.glyphy
 
 import android.content.Intent
 import android.net.Uri
@@ -41,9 +41,9 @@ fun SettingsScreen() {
                     "service: notify.mobile_app_<device>\n" +
                         "data:\n" +
                         "  message: command_broadcast_intent\n" +
-                        "  title: eu.nakokot.glyphha.PULSE\n" +
+                        "  title: xyz.x600161.glyphy.PULSE\n" +
                         "  data:\n" +
-                        "    intent_package_name: eu.nakokot.glyphha\n" +
+                        "    intent_package_name: xyz.x600161.glyphy\n" +
                         "    intent_extras: \"token:$token,group:round,value:100,ms:800\"",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall
@@ -63,7 +63,7 @@ fun SettingsScreen() {
             SelectionContainer {
                 Text(
                     "intent_extras: \"token:$token,name:my_animation\"\n" +
-                        "title: eu.nakokot.glyphha.PLAY_ANIM",
+                        "title: xyz.x600161.glyphy.PLAY_ANIM",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall
                 )
