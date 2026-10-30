@@ -151,7 +151,7 @@ fun HomeScreen() {
                     Column(Modifier.weight(1f)) {
                         Text("Gesture detection")
                         Text(
-                            "Shake twice: toggle torch. Tap the back twice while charging: battery. " +
+                            "Shake twice: toggle torch. While charging: battery level glows at 1 % on the bottom line. " +
                                 "Face down with the screen off: unread-notification glow, music bar, " +
                                 "Volume Down twice: unread count.",
                             style = MaterialTheme.typography.bodySmall

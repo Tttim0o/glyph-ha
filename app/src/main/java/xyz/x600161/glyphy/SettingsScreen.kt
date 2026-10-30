@@ -54,7 +54,11 @@ fun SettingsScreen() {
         Text("Actions", style = MaterialTheme.typography.titleSmall)
         Text(
             "SET (group, value 0-100) · PULSE (group, value, ms) · OFF · " +
-                "PLAY_ANIM (name: a saved animation from the Animations tab)",
+                "PLAY_ANIM (name: a saved animation from the Animations tab) · " +
+                "TORCH / FLASH (state on|off|toggle) · STROBE (pattern sos|blink) · " +
+                "BAR (count 0-8, value) · BATTERY · COUNT · GESTURES (state on|off) · " +
+                "CONFIG (key shake_effect|motion_effect, value glyph|flash|both; " +
+                "key charging_bar|debug_toasts, value on|off)",
             style = MaterialTheme.typography.bodySmall
         )
         Text("Groups: ${Glyph.groups.keys.joinToString()}", style = MaterialTheme.typography.bodySmall)
@@ -69,6 +73,14 @@ fun SettingsScreen() {
                 )
             }
         }
+
+        Text("Tasker", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Task → System → Send Intent. Action: xyz.x600161.glyphy.<ACTION>, " +
+                "Package: xyz.x600161.glyphy, Target: Broadcast Receiver, " +
+                "Extras: token:$token and the action's extras, one key:value per line.",
+            style = MaterialTheme.typography.bodySmall
+        )
 
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
         Text("Updates", style = MaterialTheme.typography.titleSmall)
@@ -122,7 +134,7 @@ fun SettingsScreen() {
             Column(Modifier.weight(1f)) {
                 Text("Debug toasts for gestures", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "Shows a toast for every detected tap/shake while tuning. Turn off once it feels right.",
+                    "Shows a toast for every detected shake while tuning. Turn off once it feels right.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -133,9 +145,8 @@ fun SettingsScreen() {
         Text("About the gestures", style = MaterialTheme.typography.titleSmall)
         Text(
             "Gesture detection runs as a low-priority foreground service and reads the " +
-                "accelerometer continuously, which costs roughly 1-3% battery per day. Shake and " +
-                "tap thresholds are approximate — there's no dedicated tap sensor on this phone, " +
-                "so accuracy will be lower than a Pixel's \"Quick Tap\". The unread-notification " +
+                "accelerometer continuously, which costs roughly 1-3% battery per day. Shake " +
+                "thresholds are approximate. The unread-notification " +
                 "count comes from currently active, undismissed notifications (via notification " +
                 "access), not a historical log.",
             style = MaterialTheme.typography.bodySmall

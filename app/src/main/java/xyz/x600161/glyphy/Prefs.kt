@@ -30,6 +30,13 @@ object Prefs {
         prefs(c).edit().putBoolean("debug_toasts", v).apply()
     }
 
+    /** Dim battery bar on the bottom line while charging. On by default. */
+    fun chargingBar(c: Context): Boolean = prefs(c).getBoolean("charging_bar", true)
+
+    fun setChargingBar(c: Context, v: Boolean) {
+        prefs(c).edit().putBoolean("charging_bar", v).apply()
+    }
+
     /** What a shake does: "glyph", "flash" or "both". */
     fun shakeEffect(c: Context): String = prefs(c).getString("shake_effect", "glyph") ?: "glyph"
 

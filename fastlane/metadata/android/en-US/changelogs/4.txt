@@ -1,0 +1,3 @@
+Charging bar: the battery level glows at 1 % on the bottom line while charging (replaces the unreliable charging tap).
+Permissions card: request root and notification access from the app.
+Tasker and Home Assistant can control torch, flash, strobe, bar, battery, count, gestures and settings.

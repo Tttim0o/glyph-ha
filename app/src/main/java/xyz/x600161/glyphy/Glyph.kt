@@ -74,11 +74,15 @@ object Glyph {
         Shell.cmd(sb.toString()).submit { done() }
     }
 
-    /** Show battery percentage on the bottom line for `holdMs`, then turn off. */
-    fun showBattery(percent: Int, holdMs: Int = 2500, done: () -> Unit = {}) {
-        val lit = ((percent.coerceIn(0, 100) / 100f) * vlineIndexOrder.size).let {
+    /** How many of the 8 bottom-line segments represent `percent` battery (at least 1 above 0 %). */
+    fun batterySegments(percent: Int): Int =
+        ((percent.coerceIn(0, 100) / 100f) * vlineIndexOrder.size).let {
             if (it < 1f && percent > 0) 1 else kotlin.math.ceil(it).toInt()
         }
+
+    /** Show battery percentage on the bottom line for `holdMs`, then turn off. */
+    fun showBattery(percent: Int, holdMs: Int = 2500, done: () -> Unit = {}) {
+        val lit = batterySegments(percent)
         val sb = StringBuilder()
         vlineIndexOrder.forEachIndexed { i, idx ->
             val v = if (i < lit) raw(100) else 0
