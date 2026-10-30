@@ -22,6 +22,11 @@ android {
             keyPassword = "android"
         }
     }
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
