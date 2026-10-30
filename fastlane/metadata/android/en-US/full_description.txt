@@ -1,0 +1,18 @@
+Glyphs drives the Nothing Phone (1) glyph interface and the camera flash directly through the kernel LED driver.
+
+Features
+- Manual control of every glyph zone, with brightness sliders and presets.
+- Animation composer: build step sequences, preview them on screen, then play them on the glyphs or save them.
+- Shake twice to toggle the torch; choose glyphs, flash, or both.
+- Charging-tap: tap the back twice while charging to show the battery level on the bottom line.
+- Record your own phone motion and bind it to a glyph or flash effect.
+- Unread-notification glow and music-synced bar when the phone is face-down with the screen off.
+- Home Assistant integration through a token-protected broadcast intent API.
+
+Requirements
+- Nothing Phone (1), rooted with Magisk or KernelSU (root is required to write the LED sysfs nodes).
+- Android 10 or newer.
+- Optional: notification access (for unread counts).
+
+Privacy
+No network access, no analytics, no accounts. Gesture data stays on the device.

@@ -46,6 +46,24 @@ fun HomeScreen() {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Glyphs", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    "Nothing Phone (1) glyphs and camera flash",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(onClick = {}, label = { Text(if (gesturesOn) "Gestures on" else "Gestures off") })
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(if (NotificationCounterService.Stats.isConnected(context)) "Notifications" else "No notif access") }
+                    )
+                }
+            }
+        }
+
         Text("Manual control", style = MaterialTheme.typography.titleMedium)
         Glyph.groups.keys.forEach { g ->
             var v by remember { mutableFloatStateOf(0f) }
