@@ -158,9 +158,6 @@ class GestureService : Service(), SensorEventListener {
         val magnitude = kotlin.math.abs(signed)
         val now = System.currentTimeMillis()
 
-        history.addLast(now to magnitude)
-        while (history.isNotEmpty() && now - history.first().first > historyWindowMs) history.removeFirst()
-
         // Custom motion: record a template, or match the last window against it.
         recent.addLast(now to signed)
         while (recent.isNotEmpty() && now - recent.first().first > GestureLearn.WINDOW_MS) recent.removeFirst()
@@ -174,6 +171,17 @@ class GestureService : Service(), SensorEventListener {
                 Effects.runMotion(this)
             }
         }
+
+        detectTapAndShake(event.timestamp / 1_000_000L, magnitude)
+    }
+
+    /**
+     * Tap and shake detection on sensor time. With the screen off, events arrive in batches,
+     * so wall-clock delivery time would squash a whole batch into one instant.
+     */
+    private fun detectTapAndShake(now: Long, magnitude: Float) {
+        history.addLast(now to magnitude)
+        while (history.isNotEmpty() && now - history.first().first > historyWindowMs) history.removeFirst()
 
         // A pending tap candidate: confirm it only once the signal has settled back down -
         // genuine knocks ring out fast; charger/motor vibration stays elevated and gets dropped.
