@@ -54,11 +54,13 @@ class GestureService : Service(), SensorEventListener {
     private val historyWindowMs = 400L
     private val calmWindowMs = 150L
 
-    // Logs while charging on a table show a resting vibration baseline of ~12-16 m/s2,
-    // so "calm" and "settled" have to sit above that baseline, while taps peak at 29-43.
-    private val calmThreshold = 18f
+    // The baseline is the median magnitude 150-400 ms before a spike, so a few tap/shake
+    // samples do not count as "not calm"; a tap must decay to near that baseline to count.
+    // Charger vibration sits around 12-24 m/s2 while taps peak at 29-43.
+    private val calmThreshold = 26f
     private val tapThreshold = 28f
-    private val settleThreshold = 18f       // candidate must decay back below this to count as a real knock
+    private val settleMargin = 6f           // candidate must decay back to baseline + this to count as a knock
+    private var pendingBaseline = 0f
     private val settleWindowMs = 150L       // ...within this long; sustained vibration never settles in time
     private val shakeThreshold = 20f
 
@@ -176,7 +178,7 @@ class GestureService : Service(), SensorEventListener {
         // A pending tap candidate: confirm it only once the signal has settled back down -
         // genuine knocks ring out fast; charger/motor vibration stays elevated and gets dropped.
         if (pendingTapAt != 0L) {
-            if (magnitude < settleThreshold) {
+            if (magnitude < pendingBaseline + settleMargin) {
                 pendingTapAt = 0L
                 registerTap(now, pendingTapMagnitude)
             } else if (now - pendingTapAt > settleWindowMs) {
@@ -188,7 +190,9 @@ class GestureService : Service(), SensorEventListener {
 
         if (now - lastActionAt < actionCooldownMs) return
 
-        val calmBefore = history.dropLast(1).filter { now - it.first <= calmWindowMs }.all { it.second < calmThreshold }
+        val older = history.filter { now - it.first in calmWindowMs..historyWindowMs }.map { it.second }.sorted()
+        val baseline = if (older.isEmpty()) 0f else older[older.size / 2]
+        val calmBefore = baseline < calmThreshold
         val sustainedSwing = history.count { it.second > shakeThreshold } >= 3
 
         if (now - lastPeakAt < 120) return
@@ -205,12 +209,13 @@ class GestureService : Service(), SensorEventListener {
                 Effects.toggleForShake(this)
             }
         } else if (magnitude > tapThreshold) {
-            toast("peak mag=${"%.1f".format(magnitude)} calm=$calmBefore charging=${isCharging()}")
+            toast("peak mag=${"%.1f".format(magnitude)} baseline=${"%.1f".format(baseline)} calm=$calmBefore charging=${isCharging()}")
         }
         if (calmBefore && magnitude > tapThreshold) {
             lastPeakAt = now
             pendingTapAt = now
             pendingTapMagnitude = magnitude
+            pendingBaseline = baseline
         }
     }
 
