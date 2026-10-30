@@ -27,9 +27,8 @@ import kotlin.math.sqrt
  * ambient effects and a raw-hardware-button shortcut.
  *
  *  - Shake (two sharp jerks in ~1s): toggles the white glyphs as a torch.
- *  - Charger plugged in: shows battery % on the bottom line.
- *  - Tap on the frame/back while charging (two sharp isolated spikes): shows battery % on the
- *    bottom line. Does nothing while unplugged.
+ *  - Charger plugged in: shows battery % on the bottom line, then keeps it glowing at 1 %
+ *    brightness for as long as the phone charges; unplugging turns it off.
  *  - Face-down + screen off + unread notifications: the small "front" glyph fades in and back
  *    out once (~5s), re-triggering only when the unread count changes - not a steady light.
  *  - Face-down + screen off + music playing: the bottom line becomes an audio-reactive
@@ -48,35 +47,22 @@ class GestureService : Service(), SensorEventListener {
     private var buttonWatcher: ButtonWatcher? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // Rolling history of recent |magnitude| samples, used to require a calm baseline
-    // before a spike counts as a deliberate tap.
+    // Rolling history of recent |magnitude| samples, used to spot a sustained swing (shake).
     private val history = ArrayDeque<Pair<Long, Float>>()
     private val historyWindowMs = 400L
-    private val calmWindowMs = 150L
-
-    // The baseline is the median magnitude 150-400 ms before a spike, so a few tap/shake
-    // samples do not count as "not calm"; a tap must decay to near that baseline to count.
-    // Charger vibration sits around 12-24 m/s2 while taps peak at 29-43.
-    private val calmThreshold = 26f
-    private val tapThreshold = 28f
-    private val settleMargin = 6f           // candidate must decay back to baseline + this to count as a knock
-    private var pendingBaseline = 0f
-    private val settleWindowMs = 150L       // ...within this long; sustained vibration never settles in time
     private val shakeThreshold = 20f
 
     private var lastPeakAt = 0L
     private val shakeWindowMs = 1200L
-    private val tapWindowMs = 650L
     private var shakePeaks = 0
     private var firstShakeAt = 0L
-    private var tapPeaks = 0
-    private var firstTapAt = 0L
     private var lastActionAt = 0L
     private val actionCooldownMs = 1800L
 
-    // A tap candidate waits here until it either settles (real knock) or times out (noise).
-    private var pendingTapAt = 0L
-    private var pendingTapMagnitude = 0f
+    // Charging bar: redrawn when the lit segment count changes, and at least once a minute so
+    // it comes back after another effect (notification count, music bar) used the bottom line.
+    private var chargingBarSegments = -1
+    private var chargingBarDrawnAt = 0L
 
     @Volatile private var isFaceDown = false
     @Volatile private var screenOn = true
@@ -96,10 +82,25 @@ class GestureService : Service(), SensorEventListener {
         }
     }
 
-    // Charger plugged in: show the battery level on the bottom line, like the charging tap does.
+    // Plugged in: full-brightness battery level for a moment, then the dim charging bar.
+    // ACTION_BATTERY_CHANGED is sticky, so it also draws the bar right away if already charging.
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            showBattery()
+            when (intent.action) {
+                Intent.ACTION_POWER_CONNECTED -> {
+                    chargingBarSegments = -1
+                    Glyph.showBattery(batteryPercent()) { mainHandler.post { updateChargingBar() } }
+                }
+                ACTION_REDRAW_CHARGING_BAR -> {
+                    chargingBarSegments = -1
+                    if (Prefs.chargingBar(context)) updateChargingBar() else Glyph.showBar(0)
+                }
+                Intent.ACTION_POWER_DISCONNECTED -> {
+                    chargingBarSegments = -1
+                    Glyph.showBar(0)
+                }
+                Intent.ACTION_BATTERY_CHANGED -> updateChargingBar()
+            }
         }
     }
 
@@ -115,7 +116,7 @@ class GestureService : Service(), SensorEventListener {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         startForeground(1, buildNotification())
         // Accelerometer events stop being delivered when the CPU suspends (screen off, charging),
-        // which is exactly when the charging-tap gesture needs them - hold a partial wake lock.
+        // which would stop shake detection with the screen off - hold a partial wake lock.
         wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "glyphha:gestures")
             .also { it.setReferenceCounted(false); it.acquire() }
@@ -125,7 +126,10 @@ class GestureService : Service(), SensorEventListener {
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF)
         })
-        registerReceiver(powerReceiver, IntentFilter(Intent.ACTION_POWER_CONNECTED))
+        registerReceiver(powerReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_POWER_CONNECTED); addAction(Intent.ACTION_POWER_DISCONNECTED)
+            addAction(Intent.ACTION_BATTERY_CHANGED); addAction(ACTION_REDRAW_CHARGING_BAR)
+        }, Context.RECEIVER_NOT_EXPORTED)
         mainHandler.post(ambientTick)
         buttonWatcher = ButtonWatcher {
             if (isFaceDown && !screenOn) {
@@ -172,41 +176,21 @@ class GestureService : Service(), SensorEventListener {
             }
         }
 
-        detectTapAndShake(event.timestamp / 1_000_000L, magnitude)
+        detectShake(event.timestamp / 1_000_000L, magnitude)
     }
 
     /**
-     * Tap and shake detection on sensor time. With the screen off, events arrive in batches,
+     * Shake detection on sensor time. With the screen off, events arrive in batches,
      * so wall-clock delivery time would squash a whole batch into one instant.
      */
-    private fun detectTapAndShake(now: Long, magnitude: Float) {
+    private fun detectShake(now: Long, magnitude: Float) {
         history.addLast(now to magnitude)
         while (history.isNotEmpty() && now - history.first().first > historyWindowMs) history.removeFirst()
 
-        // A pending tap candidate: confirm it only once the signal has settled back down -
-        // genuine knocks ring out fast; charger/motor vibration stays elevated and gets dropped.
-        if (pendingTapAt != 0L) {
-            if (magnitude < pendingBaseline + settleMargin) {
-                pendingTapAt = 0L
-                registerTap(now, pendingTapMagnitude)
-            } else if (now - pendingTapAt > settleWindowMs) {
-                toast("tap discarded (sustained vibration, mag=${"%.1f".format(magnitude)})")
-                pendingTapAt = 0L
-            }
-            return
-        }
-
         if (now - lastActionAt < actionCooldownMs) return
-
-        val older = history.filter { now - it.first in calmWindowMs..historyWindowMs }.map { it.second }.sorted()
-        val baseline = if (older.isEmpty()) 0f else older[older.size / 2]
-        val calmBefore = baseline < calmThreshold
-        val sustainedSwing = history.count { it.second > shakeThreshold } >= 3
-
         if (now - lastPeakAt < 120) return
 
-        // While charging, the spikes belong to the tap gesture: ringing from a tap must not toggle the torch.
-        if (sustainedSwing && !isCharging()) {
+        if (history.count { it.second > shakeThreshold } >= 3) {
             lastPeakAt = now
             if (now - firstShakeAt > shakeWindowMs) { shakePeaks = 0; firstShakeAt = now }
             shakePeaks++
@@ -216,25 +200,18 @@ class GestureService : Service(), SensorEventListener {
                 toast("shake -> torch toggle")
                 Effects.toggleForShake(this)
             }
-        } else if (magnitude > tapThreshold) {
-            toast("peak mag=${"%.1f".format(magnitude)} baseline=${"%.1f".format(baseline)} calm=$calmBefore charging=${isCharging()}")
-        }
-        if (calmBefore && magnitude > tapThreshold) {
-            lastPeakAt = now
-            pendingTapAt = now
-            pendingTapMagnitude = magnitude
-            pendingBaseline = baseline
         }
     }
 
-    private fun registerTap(now: Long, magnitude: Float) {
-        if (now - firstTapAt > tapWindowMs) { tapPeaks = 0; firstTapAt = now }
-        tapPeaks++
-        toast("tap $tapPeaks confirmed (mag=${"%.1f".format(magnitude)}, charging=${isCharging()})")
-        if (isCharging() && tapPeaks == 2) {
-            tapPeaks = 0; lastActionAt = now
-            toast("2x tap -> battery"); showBattery()
-        }
+    /** Dim battery bar while charging; see chargingBarSegments for when it is redrawn. */
+    private fun updateChargingBar() {
+        if (!isCharging() || !Prefs.chargingBar(this)) return
+        val segments = Glyph.batterySegments(batteryPercent())
+        val now = System.currentTimeMillis()
+        if (segments == chargingBarSegments && now - chargingBarDrawnAt < 60_000) return
+        chargingBarSegments = segments
+        chargingBarDrawnAt = now
+        Glyph.showBar(segments, CHARGING_BAR_PERCENT)
     }
 
     /** Runs every 200ms: applies the two face-down ambient effects. Cheap no-ops when inactive. */
@@ -282,7 +259,6 @@ class GestureService : Service(), SensorEventListener {
         return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
     }
 
-    private fun showBattery() = Glyph.showBattery(batteryPercent())
 
     private fun buildNotification(): Notification {
         val channelId = "glyph_gestures"
@@ -300,6 +276,9 @@ class GestureService : Service(), SensorEventListener {
     }
 
     companion object {
+        const val CHARGING_BAR_PERCENT = 1
+        /** In-app broadcast: the charging_bar setting changed, redraw or clear the bar. */
+        const val ACTION_REDRAW_CHARGING_BAR = "xyz.x600161.glyphy.internal.REDRAW_CHARGING_BAR"
         fun isEnabled(c: Context) = Prefs.gesturesEnabled(c)
     }
 }

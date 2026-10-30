@@ -36,6 +36,14 @@
                 <action android:name="xyz.x600161.glyphy.PULSE" />
                 <action android:name="xyz.x600161.glyphy.OFF" />
                 <action android:name="xyz.x600161.glyphy.PLAY_ANIM" />
+                <action android:name="xyz.x600161.glyphy.TORCH" />
+                <action android:name="xyz.x600161.glyphy.FLASH" />
+                <action android:name="xyz.x600161.glyphy.STROBE" />
+                <action android:name="xyz.x600161.glyphy.BAR" />
+                <action android:name="xyz.x600161.glyphy.BATTERY" />
+                <action android:name="xyz.x600161.glyphy.COUNT" />
+                <action android:name="xyz.x600161.glyphy.GESTURES" />
+                <action android:name="xyz.x600161.glyphy.CONFIG" />
             </intent-filter>
         </receiver>
 
