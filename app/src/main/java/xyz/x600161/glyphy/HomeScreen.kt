@@ -19,7 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.topjohnwu.superuser.Shell
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,6 +36,8 @@ fun HomeScreen() {
     var hasMotion by remember { mutableStateOf(Prefs.motionTemplate(context) != null) }
     var recording by remember { mutableStateOf(false) }
     val notifPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val scope = rememberCoroutineScope()
+    var rootStatus by remember { mutableStateOf<String?>(null) }
 
     // Poll the recording state so the button returns to normal once the window is saved.
     LaunchedEffect(recording) {
@@ -97,6 +103,46 @@ fun HomeScreen() {
 
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
+        Text("Permissions", style = MaterialTheme.typography.titleMedium)
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Root", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    "Needed for the Volume Down gesture, LED control and music bar. " +
+                        "Tap to ask Magisk for Glyphy's root access.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                FilledTonalButton(onClick = {
+                    scope.launch {
+                        rootStatus = "Asking for root…"
+                        val granted = withContext(Dispatchers.IO) { Shell.getShell().isRoot }
+                        rootStatus = if (granted) "Root granted" else "Root denied or unavailable"
+                    }
+                }) { Text("Request root") }
+                rootStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                Text("Notification access", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    "Needed for the unread-count glow and count effects.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                AssistChip(
+                    onClick = {
+                        context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+                    },
+                    label = {
+                        Text(
+                            if (NotificationCounterService.Stats.isConnected(context)) "Notification access granted"
+                            else "Grant notification access"
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Filled.NotificationsActive, null) }
+                )
+            }
+        }
+
         Text("Gestures", style = MaterialTheme.typography.titleMedium)
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -120,15 +166,6 @@ fun HomeScreen() {
                             GestureServiceControl.stop(context)
                         }
                     })
-                }
-                if (gesturesOn && !NotificationCounterService.Stats.isConnected(context)) {
-                    AssistChip(
-                        onClick = {
-                            context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
-                        },
-                        label = { Text("Grant notification access for the unread-count effects") },
-                        leadingIcon = { Icon(Icons.Filled.NotificationsActive, null) }
-                    )
                 }
             }
         }
