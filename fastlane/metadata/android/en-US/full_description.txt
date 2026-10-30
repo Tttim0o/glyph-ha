@@ -15,4 +15,4 @@ Requirements
 - Optional: notification access (for unread counts).
 
 Privacy
-No network access, no analytics, no accounts. Gesture data stays on the device.
+No analytics, no accounts. The only network use is an optional, manual update check against GitHub Releases. Gesture data stays on the device.

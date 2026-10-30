@@ -6,7 +6,8 @@
 - **Broadcast API:** `GlyphReceiver` accepts intents only with the per-install token stored
   in the app's private preferences. The token is shown in Settings; treat it like a password.
 - **Backups:** `allowBackup` is disabled so tokens and motion templates are not exported.
-- **No network:** the app declares no INTERNET permission.
+- **Network:** the only network use is the user-initiated "Check for updates" in Settings,
+  which calls the GitHub Releases API. Nothing is sent about the device. Nothing installs silently.
 - **Signing:** `app/debug.keystore` in this repository is a debug-only key for stable CI
   signing. It must not be used to sign a public release. Use your own release key.
 
