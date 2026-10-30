@@ -1,4 +1,4 @@
-Glyphs drives the Nothing Phone (1) glyph interface and the camera flash directly through the kernel LED driver.
+Glyphy drives the Nothing Phone (1) glyph interface and the camera flash directly through the kernel LED driver.
 
 Features
 - Manual control of every glyph zone, with brightness sliders and presets.
