@@ -26,8 +26,9 @@ import kotlin.math.sqrt
  * ambient effects and a raw-hardware-button shortcut.
  *
  *  - Shake (two sharp jerks in ~1s): toggles the white glyphs as a torch.
+ *  - Charger plugged in: shows battery % on the bottom line.
  *  - Tap on the frame/back while charging (two sharp isolated spikes): shows battery % on the
- *    bottom line.
+ *    bottom line. Does nothing while unplugged.
  *  - Face-down + screen off + unread notifications: the small "front" glyph fades in and back
  *    out once (~5s), re-triggering only when the unread count changes - not a steady light.
  *  - Face-down + screen off + music playing: the bottom line becomes an audio-reactive
@@ -90,6 +91,13 @@ class GestureService : Service(), SensorEventListener {
         }
     }
 
+    // Charger plugged in: show the battery level on the bottom line, like the charging tap does.
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            showBattery()
+        }
+    }
+
     private val ambientTick = object : Runnable {
         override fun run() {
             updateAmbient()
@@ -112,6 +120,7 @@ class GestureService : Service(), SensorEventListener {
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF)
         })
+        registerReceiver(powerReceiver, IntentFilter(Intent.ACTION_POWER_CONNECTED))
         mainHandler.post(ambientTick)
         buttonWatcher = ButtonWatcher {
             if (isFaceDown && !screenOn) {
@@ -126,6 +135,7 @@ class GestureService : Service(), SensorEventListener {
     override fun onDestroy() {
         sensorManager.unregisterListener(this)
         try { unregisterReceiver(screenReceiver) } catch (e: Exception) {}
+        try { unregisterReceiver(powerReceiver) } catch (e: Exception) {}
         mainHandler.removeCallbacks(ambientTick)
         buttonWatcher?.stop()
         wakeLock?.let { if (it.isHeld) it.release() }
