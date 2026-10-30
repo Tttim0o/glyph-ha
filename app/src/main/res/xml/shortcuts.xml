@@ -2,17 +2,17 @@
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut android:shortcutId="pulse" android:enabled="true"
         android:shortcutShortLabel="@string/s_pulse">
-        <intent android:action="eu.nakokot.glyphha.PULSE" android:targetPackage="eu.nakokot.glyphha"
-            android:targetClass="eu.nakokot.glyphha.ShortcutActivity" />
+        <intent android:action="xyz.x600161.glyphy.PULSE" android:targetPackage="xyz.x600161.glyphy"
+            android:targetClass="xyz.x600161.glyphy.ShortcutActivity" />
     </shortcut>
     <shortcut android:shortcutId="all" android:enabled="true"
         android:shortcutShortLabel="@string/s_all">
-        <intent android:action="eu.nakokot.glyphha.SET" android:targetPackage="eu.nakokot.glyphha"
-            android:targetClass="eu.nakokot.glyphha.ShortcutActivity" />
+        <intent android:action="xyz.x600161.glyphy.SET" android:targetPackage="xyz.x600161.glyphy"
+            android:targetClass="xyz.x600161.glyphy.ShortcutActivity" />
     </shortcut>
     <shortcut android:shortcutId="off" android:enabled="true"
         android:shortcutShortLabel="@string/s_off">
-        <intent android:action="eu.nakokot.glyphha.OFF" android:targetPackage="eu.nakokot.glyphha"
-            android:targetClass="eu.nakokot.glyphha.ShortcutActivity" />
+        <intent android:action="xyz.x600161.glyphy.OFF" android:targetPackage="xyz.x600161.glyphy"
+            android:targetClass="xyz.x600161.glyphy.ShortcutActivity" />
     </shortcut>
 </shortcuts>

@@ -5,10 +5,10 @@ plugins {
 }
 
 android {
-    namespace = "eu.nakokot.glyphha"
+    namespace = "xyz.x600161.glyphy"
     compileSdk = 35
     defaultConfig {
-        applicationId = "eu.nakokot.glyphha"
+        applicationId = "xyz.x600161.glyphy"
         minSdk = 29
         targetSdk = 35
         versionCode = 3
