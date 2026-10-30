@@ -1,4 +1,4 @@
-# Glyphs
+# Glyphy
 
 Control the Nothing Phone (1) glyph interface and camera flash from an Android app.
 

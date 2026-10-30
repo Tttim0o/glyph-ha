@@ -48,7 +48,7 @@ fun HomeScreen() {
     ) {
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Glyphs", style = MaterialTheme.typography.headlineSmall)
+                Text("Glyphy", style = MaterialTheme.typography.headlineSmall)
                 Text(
                     "Nothing Phone (1) glyphs and camera flash",
                     style = MaterialTheme.typography.bodyMedium,
