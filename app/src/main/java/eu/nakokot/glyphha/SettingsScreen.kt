@@ -1,5 +1,7 @@
 package eu.nakokot.glyphha
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -9,11 +11,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen() {
@@ -63,6 +69,47 @@ fun SettingsScreen() {
                 )
             }
         }
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        Text("Updates", style = MaterialTheme.typography.titleSmall)
+        var updateStatus by remember { mutableStateOf<String?>(null) }
+        var updateUrl by remember { mutableStateOf<String?>(null) }
+        var checking by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        Text(
+            "Checks GitHub Releases only when you press the button. Nothing installs silently: " +
+                "a new APK opens in your browser for you to confirm.",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(enabled = !checking, onClick = {
+                checking = true
+                updateStatus = null
+                scope.launch {
+                    val msg = withContext(Dispatchers.IO) {
+                        try {
+                            val r = UpdateChecker.check(context)
+                            updateUrl = r.apkUrl ?: r.pageUrl
+                            when {
+                                r.updateAvailable -> "Version ${r.latestCode} is available (you have ${r.currentCode})."
+                                else -> "You are up to date (version ${r.currentCode})."
+                            }
+                        } catch (e: Exception) {
+                            updateUrl = null
+                            "Update check failed: ${e.message ?: "network error"}"
+                        }
+                    }
+                    updateStatus = msg
+                    checking = false
+                }
+            }) { Text(if (checking) "Checking…" else "Check for updates") }
+            if (updateUrl != null && updateStatus?.startsWith("Version") == true) {
+                OutlinedButton(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl)))
+                }) { Text("Download") }
+            }
+        }
+        updateStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
         Text("Token", style = MaterialTheme.typography.titleSmall)
