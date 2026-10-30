@@ -1,9 +1,11 @@
 package eu.nakokot.glyphha
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -19,6 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +47,8 @@ fun AnimatorScreen() {
         Text("Animation composer", style = MaterialTheme.typography.titleMedium)
         Text(
             "Build a sequence of steps — each lights a zone or a single LED (1–16) at a brightness " +
-                "for a duration — then save and play it, loop it, or trigger it from Home Assistant.",
+                "for a duration — preview it on screen, then play it on the glyphs, save it, or " +
+                "trigger it from Home Assistant.",
             style = MaterialTheme.typography.bodySmall
         )
 
@@ -93,12 +99,14 @@ fun AnimatorScreen() {
             Text("Loops — ${loops.toInt()}")
             Slider(value = loops, onValueChange = { loops = it }, valueRange = 1f..20f, steps = 18)
 
+            SoftwarePreview(steps, loops.toInt())
+
             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Animation name") },
                 modifier = Modifier.fillMaxWidth())
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { GlyphAnim.play(GlyphAnimation(name.ifBlank { "preview" }, steps, loops.toInt())) }) {
-                    Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Play")
+                    Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Play on glyphs")
                 }
                 OutlinedButton(onClick = { GlyphAnim.stop() }) {
                     Icon(Icons.Filled.Stop, null); Spacer(Modifier.width(6.dp)); Text("Stop")
@@ -129,5 +137,74 @@ fun AnimatorScreen() {
             }
         }
         if (animations.isEmpty()) Text("No saved animations yet.", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+/** LEDs lit by a target, using the same index map as the kernel driver (Glyph.kt / GlyphAnim). */
+private fun ledsFor(target: String): List<Int> = when {
+    target == "off" -> emptyList()
+    target.startsWith("single:") -> listOfNotNull(target.removePrefix("single:").toIntOrNull())
+    target == "white" -> (1..16).filter { it != 6 }
+    target == "round" -> (2..5).toList()
+    target == "vline" -> Glyph.vlineIndexOrder
+    else -> emptyList()
+}
+
+/**
+ * Software-only preview: runs the steps on screen so the animation can be judged before it is
+ * sent to the glyphs. Shows the 16 single LEDs (zone targets light the LEDs they map to).
+ * Zones without a known LED map (dot, front, rear, horse) are not drawn here.
+ */
+@Composable
+private fun SoftwarePreview(steps: List<AnimStep>, loops: Int) {
+    val scope = rememberCoroutineScope()
+    val levels = remember { mutableStateListOf<Float>().apply { repeat(17) { add(0f) } } }
+    var job by remember { mutableStateOf<Job?>(null) }
+    var running by remember { mutableStateOf(false) }
+
+    fun reset() { for (i in 1..16) levels[i] = 0f }
+
+    fun play() {
+        job?.cancel()
+        job = scope.launch {
+            running = true
+            repeat(loops) {
+                steps.forEach { s ->
+                    reset()
+                    ledsFor(s.target).forEach { led -> levels[led] = s.percent / 100f }
+                    delay(s.ms.toLong())
+                }
+            }
+            reset()
+            running = false
+        }
+    }
+
+    fun stop() {
+        job?.cancel()
+        reset()
+        running = false
+    }
+
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Preview (on screen)", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (i in 1..16) {
+                    val a = levels[i].coerceIn(0.06f, 1f)
+                    Box(
+                        Modifier.size(16.dp)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = a), CircleShape)
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = { if (running) stop() else play() }) {
+                    Icon(if (running) Icons.Filled.Stop else Icons.Filled.PlayArrow, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (running) "Stop preview" else "Preview")
+                }
+            }
+        }
     }
 }
