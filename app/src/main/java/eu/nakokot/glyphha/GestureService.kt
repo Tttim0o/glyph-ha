@@ -78,6 +78,11 @@ class GestureService : Service(), SensorEventListener {
     private val visualizer = MusicVisualizer()
     private var visualizing = false
 
+    // Signed-magnitude history for custom motion matching (kept WINDOW_MS long).
+    private val recent = ArrayDeque<Pair<Long, Float>>()
+    private var lastMotionAt = 0L
+    private var motionTick = 0
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             screenOn = intent.action == Intent.ACTION_SCREEN_ON
@@ -134,11 +139,26 @@ class GestureService : Service(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
         val (x, y, z) = event.values
         isFaceDown = z < -7f && kotlin.math.abs(x) < 4f && kotlin.math.abs(y) < 4f
-        val magnitude = kotlin.math.abs(sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH)
+        val signed = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
+        val magnitude = kotlin.math.abs(signed)
         val now = System.currentTimeMillis()
 
         history.addLast(now to magnitude)
         while (history.isNotEmpty() && now - history.first().first > historyWindowMs) history.removeFirst()
+
+        // Custom motion: record a template, or match the last window against it.
+        recent.addLast(now to signed)
+        while (recent.isNotEmpty() && now - recent.first().first > GestureLearn.WINDOW_MS) recent.removeFirst()
+        if (GestureLearn.feed(this, now, signed)) {
+            toast("motion recorded")
+        } else if (!GestureLearn.recording && now - lastMotionAt > 3000 && ++motionTick % 4 == 0) {
+            val score = GestureLearn.score(this, recent.toList(), now)
+            if (score != null && score > GestureLearn.MATCH_THRESHOLD) {
+                lastMotionAt = now
+                toast("motion match ${"%.2f".format(score)}")
+                Effects.runMotion(this)
+            }
+        }
 
         // A pending tap candidate: confirm it only once the signal has settled back down -
         // genuine knocks ring out fast; charger/motor vibration stays elevated and gets dropped.
@@ -168,7 +188,7 @@ class GestureService : Service(), SensorEventListener {
             if (shakePeaks >= 2) {
                 shakePeaks = 0; lastActionAt = now
                 toast("shake -> torch toggle")
-                Glyph.toggleTorch()
+                Effects.toggleForShake(this)
             }
         } else if (magnitude > tapThreshold) {
             toast("peak mag=${"%.1f".format(magnitude)} calm=$calmBefore charging=${isCharging()}")
