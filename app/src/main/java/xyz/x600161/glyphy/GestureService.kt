@@ -54,9 +54,11 @@ class GestureService : Service(), SensorEventListener {
     private val historyWindowMs = 400L
     private val calmWindowMs = 150L
 
-    private val calmThreshold = 2.5f
+    // Logs while charging on a table show a resting vibration baseline of ~12-16 m/s2,
+    // so "calm" and "settled" have to sit above that baseline, while taps peak at 29-43.
+    private val calmThreshold = 18f
     private val tapThreshold = 28f
-    private val settleThreshold = 6f        // candidate must decay back below this to count as a real knock
+    private val settleThreshold = 18f       // candidate must decay back below this to count as a real knock
     private val settleWindowMs = 150L       // ...within this long; sustained vibration never settles in time
     private val shakeThreshold = 20f
 
