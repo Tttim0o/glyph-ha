@@ -18,6 +18,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import kotlin.math.sqrt
 
@@ -248,6 +249,8 @@ class GestureService : Service(), SensorEventListener {
     }
 
     private fun toast(msg: String) {
+        // Always in logcat (tag "Glyphy") so gesture tuning can be read without enabling toasts.
+        Log.d("Glyphy", msg)
         if (!Prefs.debugToasts(this)) return
         mainHandler.post { Toast.makeText(this, "Glyph: $msg", Toast.LENGTH_SHORT).show() }
     }
